@@ -19,23 +19,30 @@ radius_m = radius_mi * 1609.344
 
 if st.sidebar.button("Generate Map 🚀"):
     with st.spinner("Building your SCIP beast..."):
-        # Geocode
-        if "," in location_input:
-            lat, lon = map(float, location_input.split(","))
+        # Improved Geocode
+        if "," in location_input.strip():
+            try:
+                parts = [p.strip() for p in location_input.split(",")]
+                lat, lon = float(parts[0]), float(parts[1])
+            except:
+                st.error("Invalid lat,lon format 🤷 Try '25.7617, -80.1918'")
+                st.stop()
         else:
-            loc = geolocator.geocode(location_input + ", Florida")
+            query = location_input.strip()
+            if not query.lower().endswith(("florida", "fl")):
+                query += ", Florida"
+            loc = geolocator.geocode(query)
             if not loc:
-                st.error("Address not found 🤷 Try adding , FL")
+                st.error("Address not found 🤷 Try more details or lat,lon")
                 st.stop()
             lat, lon = loc.latitude, loc.longitude
         
-        # Airports fetch
+        # Airports
         airports_url = "https://ourairports.com/data/airports.csv"
         df_airports = pd.read_csv(airports_url)
         def haversine(lat1, lon1, lat2, lon2):
             R = 6371000
-            phi1 = math.radians(lat1)
-            phi2 = math.radians(lat2)
+            phi1, phi2 = math.radians(lat1), math.radians(lat2)
             dphi = math.radians(lat2 - lat1)
             dlambda = math.radians(lon2 - lon1)
             a = math.sin(dphi/2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2
@@ -45,7 +52,7 @@ if st.sidebar.button("Generate Map 🚀"):
         
         airports_js = f'L.marker([{closest_airport.latitude_deg}, {closest_airport.longitude_deg}]).bindTooltip("{closest_airport.name} ({closest_airport.iata_code or "N/A"})", {{permanent: true}}).bindPopup("<b>Closest Airport</b><br>{closest_airport.name}<br>Dist: {closest_airport.dist/1000:.1f} km").addTo(airportsLayer);\n'
         
-        # Cell towers API
+        # Cell towers - improved handling
         cells_js = ""
         try:
             bbox_pad = radius_m * 1.5 / 111000
@@ -53,10 +60,10 @@ if st.sidebar.button("Generate Map 🚀"):
             max_lat = lat + bbox_pad
             min_lon = lon - (bbox_pad / math.cos(math.radians(lat)))
             max_lon = lon + (bbox_pad / math.cos(math.radians(lat)))
-            bbox = f"{min_lon},{min_lat},{max_lon},{max_lat}"  # W,S,E,N order for some APIs
             url = "https://opencellid.org/ocid-api/cells/getInArea"
-            params = {"token": opencellid_token, "bbox": bbox, "limit": 500, "format": "json"}
+            params = {"token": opencellid_token, "bbox": f"{min_lon},{min_lat},{max_lon},{max_lat}", "limit": 200, "format": "json"}
             resp = requests.get(url, params=params, timeout=30)
+            resp.raise_for_status()
             data = resp.json()
             cells = data.get("cells", [])
             if cells:
@@ -67,7 +74,7 @@ if st.sidebar.button("Generate Map 🚀"):
                 for idx, row in df_cells.iterrows():
                     tech = row.get("radio", "Unknown")
                     color = {"GSM": "#00ff00", "UMTS": "#0000ff", "LTE": "#ff0000", "NR": "#ff00ff", "CDMA": "#ffff00"}.get(tech, "#888888")
-                    tooltip = f"{tech重視} {row.get('mcc', '?')}-{row.get('net', '?')}"
+                    tooltip = f"{tech} {row.get('mcc', '?')}-{row.get('net', '?')}"
                     popup = f"<b>Cell Tower</b><br>Radio: {tech}<br>MCC-MNC: {row.get('mcc')}-{row.get('net')}<br>Cell ID: {row.get('cell')}<br>Range: {row.get('range', 'N/A')}m"
                     style = f"radius: 6, fillColor: '{color}', weight: 1, opacity: 0.8, fillOpacity: 0.8"
                     if idx == closest_idx:
@@ -75,9 +82,9 @@ if st.sidebar.button("Generate Map 🚀"):
                         tooltip += " ← CLOSEST"
                     cells_js += f'L.circleMarker([{row.lat}, {row.lon}], {{{style}}}).bindTooltip("{tooltip}").bindPopup("{popup}").addTo(cellsLayer);\n'
         except Exception as e:
-            st.warning(f"Cell towers skipped (API issue): {e}")
+            st.warning(f"Cell towers skipped (API hiccup: {str(e)}) — common with free limits, still badass map! 📡")
         
-        # Full HTML with all layers
+        # Full HTML
         html_string = f"""
         <!DOCTYPE html>
         <html>
