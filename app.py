@@ -61,7 +61,7 @@ if st.sidebar.button("Generate Map 🚀"):
             min_lon = lon - (bbox_pad / math.cos(math.radians(lat)))
             max_lon = lon + (bbox_pad / math.cos(math.radians(lat)))
             url = "https://opencellid.org/ocid-api/cells/getInArea"
-            params = {"token": opencellid_token, "bbox": f"{min_lon},{min_lat},{max_lon},{max_lat}", "limit": 200, "format": "json"}
+            params = {"token": opencellid_token, "bbox": f"{min_lat},{min_lon},{max_lat},{max_lon}", "limit": 200, "format": "json"}
             resp = requests.get(url, params=params, timeout=30)
             resp.raise_for_status()
             data = resp.json()
