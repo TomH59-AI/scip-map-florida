@@ -52,7 +52,7 @@ if st.sidebar.button("Generate Map 🚀"):
         
         airports_js = f'L.marker([{closest_airport.latitude_deg}, {closest_airport.longitude_deg}]).bindTooltip("{closest_airport.name} ({closest_airport.iata_code or "N/A"})", {{permanent: true}}).bindPopup("<b>Closest Airport</b><br>{closest_airport.name}<br>Dist: {closest_airport.dist/1000:.1f} km").addTo(airportsLayer);\n'
         
-        # Cell towers - improved handling
+        # Cell towers - fixed bbox parameter order (latmin,lonmin,latmax,lonmax)
         cells_js = ""
         try:
             bbox_pad = radius_m * 1.5 / 111000
@@ -84,7 +84,7 @@ if st.sidebar.button("Generate Map 🚀"):
         except Exception as e:
             st.warning(f"Cell towers skipped (API hiccup: {str(e)}) — common with free limits, still badass map! 📡")
         
-        # Full HTML
+        # Full HTML — basemaps use direct tile URLs (replaces broken L.esri.basemapLayer from esri-leaflet v3)
         html_string = f"""
         <!DOCTYPE html>
         <html>
@@ -104,19 +104,41 @@ if st.sidebar.button("Generate Map 🚀"):
             <script>
                 var map = L.map('map').setView([{lat}, {lon}], 15);
                 
-                var satellite = L.esri.basemapLayer('Imagery');
-                var topo = L.esri.basemapLayer('Topographic');
-                var streets = L.esri.basemapLayer('Streets');
-                var usgsTopo = L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{{z}}/{{y}}/{{x}}', {{attribution: 'USGS'}});
+                // FIX: Direct tile URLs replace broken L.esri.basemapLayer (removed in esri-leaflet v3)
+                var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
+                    attribution: 'Esri World Imagery',
+                    maxZoom: 19
+                }});
+                var topo = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
+                    attribution: 'Esri Topographic',
+                    maxZoom: 19
+                }});
+                var streets = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
+                    attribution: 'Esri Streets',
+                    maxZoom: 19
+                }});
+                var usgsTopo = L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
+                    attribution: 'USGS'
+                }});
                 
                 var baseLayers = {{"Satellite": satellite, "Topographic": topo, "Streets": streets, "USGS Topo": usgsTopo}};
                 
+                // FIX: Overlay reference tiles also use direct URLs instead of basemapLayer
                 var overlays = {{}};
-                var shading = L.esri.basemapLayer('ShadedRelief');
-                overlays['Hillshading'] = shading;
-                var transport = L.esri.basemapLayer('ImageryTransportation');
+                var hillshade = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
+                    attribution: 'Esri Hillshade',
+                    opacity: 0.5
+                }});
+                overlays['Hillshading'] = hillshade;
+                var transport = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
+                    attribution: 'Esri Transportation',
+                    opacity: 0.8
+                }});
                 overlays['Roads/Transport'] = transport;
-                var labels = L.esri.basemapLayer('ImageryLabels');
+                var labels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
+                    attribution: 'Esri Labels',
+                    opacity: 0.9
+                }});
                 overlays['Labels'] = labels;
                 var flood = L.esri.dynamicMapLayer({{url: 'https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer', opacity: 0.5}});
                 overlays['FEMA Flood Hazards'] = flood;
@@ -164,3 +186,7 @@ if st.sidebar.button("Generate Map 🚀"):
         
         st.components.v1.html(html_string, height=900, scrolling=True)
     st.success("Map loaded! Toggle layers top-right 👇")
+
+
+
+
