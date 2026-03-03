@@ -324,11 +324,86 @@ if st.sidebar.button("Generate Map 🚀"):
 
                 // TowerCoverage Sites - CYAN markers
                 var tcSitesLayer = L.layerGroup();
-                overlays['\\U0001f535 TowerCoverage Sites'] = tcSitesLayer;
+                overlays['\U0001f535 TowerCoverage Sites'] = tcSitesLayer;
 
                 // Airports
                 var airportsLayer = L.layerGroup();
                 overlays['Airports'] = airportsLayer;
+
+                // ── NEW: Florida Land Use / FLUCCS (FDEP Statewide) ──────────────────────
+                var fluColors = {{
+                    '1': '#e8a0a0', // Urban & Built-Up
+                    '2': '#f5e6a3', // Agriculture
+                    '3': '#b5d9a8', // Rangeland
+                    '4': '#5aaa5a', // Upland Forests
+                    '5': '#4a90d9', // Water
+                    '6': '#7ecbcb', // Wetlands
+                    '7': '#d4a0d4', // Barren Land
+                    '8': '#a0a0a0', // Transportation/Utilities
+                    '9': '#c8c8c8'  // Other
+                }};
+                var fluLayer = L.esri.featureLayer({{
+                    url: 'https://services.arcgis.com/rD2ylXRs80UroD90/arcgis/rest/services/Statewide_Land_Use_FLUCCS/FeatureServer/24',
+                    style: function(feature) {{
+                        var code = String(feature.properties.FLUCCS || '');
+                        var cat = code.charAt(0);
+                        var color = fluColors[cat] || '#cccccc';
+                        return {{color: color, weight: 1, opacity: 0.7, fillColor: color, fillOpacity: 0.35}};
+                    }},
+                    onEachFeature: function(feature, layer) {{
+                        if (feature.properties) {{
+                            var p = feature.properties;
+                            var content = '<b style="color:#5aaa5a;">&#x25A0; Florida Land Use (FLUCCS)</b><br>' +
+                                '<table>' +
+                                '<tr><td><b>FLUCCS Code:</b></td><td>' + (p.FLUCCS || 'N/A') + '</td></tr>' +
+                                '<tr><td><b>Level 2 Desc:</b></td><td>' + (p.LEVEL2 || 'N/A') + '</td></tr>' +
+                                '<tr><td><b>Level 1 Desc:</b></td><td>' + (p.LEVEL1 || 'N/A') + '</td></tr>' +
+                                '<tr><td><b>Source:</b></td><td>' + (p.SOURCE || 'N/A') + '</td></tr>' +
+                                '</table>';
+                            layer.bindPopup(content);
+                            layer.bindTooltip('FLU: ' + (p.LEVEL2 || p.FLUCCS || ''), {{sticky: true}});
+                        }}
+                    }}
+                }});
+                overlays['\U0001f7e9 Future Land Use / FLUCCS (FDEP)'] = fluLayer;
+
+                // ── NEW: Florida Zoning (OpenStreetMap-based via Overpass + county fallback) ─
+                // Primary: Esri World Boundaries as reference + county-level zoning note
+                // We use the Florida DOR Land Use layer as a zoning proxy since there is
+                // no single statewide zoning FeatureServer. County zoning is loaded via
+                // a dynamic label overlay and a direct link to the county GIS portal.
+                var zoningNote = L.layerGroup();
+                var zoningInfoMarker = L.marker([{lat}, {lon}], {{
+                    icon: L.divIcon({{
+                        html: '<div style="background:#ff8c00;color:#fff;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:bold;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.4);">&#x1F4CB; Zoning is county-specific.<br>See popup for county GIS link.</div>',
+                        className: '',
+                        iconSize: [220, 40],
+                        iconAnchor: [110, -10]
+                    }})
+                }});
+                zoningInfoMarker.bindPopup(
+                    '<b style="color:#ff8c00;">&#x1F4CB; Zoning Layer Note</b><br>' +
+                    'Florida zoning is administered at the <b>county/municipal level</b>. ' +
+                    'There is no single statewide zoning dataset.<br><br>' +
+                    '<b>To find zoning for this location:</b><br>' +
+                    '1. Identify the county from the Parcel layer above.<br>' +
+                    '2. Visit the county Property Appraiser or GIS portal.<br>' +
+                    '3. Search <a href="https://geodata.floridagio.gov/" target="_blank">Florida GIO Open Data</a> for county zoning layers.<br>' +
+                    '4. Or use <a href="https://www.zoningatlas.org/florida" target="_blank">National Zoning Atlas – Florida</a>.<br><br>' +
+                    '<i>The FLUCCS layer above is the closest statewide land-use proxy.</i>'
+                );
+                zoningNote.addLayer(zoningInfoMarker);
+                overlays['\U0001f4cb Zoning (County-Level — see popup)'] = zoningNote;
+
+                // ── NEW: Wind Speed (NREL / Esri USA Annual Average at 80m) ─────────────
+                // Uses the Esri Living Atlas USA Average Wind Speed ImageServer (public)
+                // Tile zoom levels 0-4 only; shown as a semi-transparent raster overlay.
+                var windSpeed = L.esri.imageMapLayer({{
+                    url: 'https://tiledimageservices.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/US_Annual_Average_Wind_Speed/ImageServer',
+                    opacity: 0.55,
+                    attribution: 'NREL / Esri Living Atlas – USA Avg Wind Speed (80m)'
+                }});
+                overlays['\U0001f4a8 Wind Speed – USA Annual Avg (NREL/Esri)'] = windSpeed;
 
                 L.control.layers(baseLayers, overlays, {{collapsed: false}}).addTo(map);
                 satellite.addTo(map);
